@@ -1,0 +1,157 @@
+---
+title: "Decision Tree"
+author: "Park Ju ho"
+date: '2022 4 16 '
+mainfont: UnDotum
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# Rpart를 활용한 Tree
+```{r}
+library(rpart)
+str(iris)
+#setosa,versicolor,virginica
+c = rpart(Species ~., data = iris)
+
+c
+```
+총 150개의 iris data를 분할  
+왼쪽부터 노드(만약 Full Tree일 경우에 왼쪽부터 노드의 번호가 부여됨), 분할 기준, 노드 안의 원소 수, 손실율(yval를 기준으로 해당 범주가 아닌 것의 수), 현재 노드의 최빈 라벨, 각 범주별 비율(비율의 label 순서는 factor의 level순서와 같음)  
+
+1번 노드는 루트 노드이므로 생략  
+2번 노드는 Petal.Length를 기준으로 나뉘어졌으며 왼쪽 노드에는 100% Setosa가 들어감  
+3번 노드는 같은 기준으로 나뉘어진 노드 중 오른쪽 노드로 versicolor와 virginica가 반반씩 들어감  
+  6번 노드는 Petal.width를 기준으로 나뉘어졌으며 54개 중 49의 versicolor가 있음  
+  7번 노드는 같은 기준으로 나뉘어진 오른쪽 노드로 46개 중 45개의 virginica가 있음  
+
+## 그래프
+```{r}
+plot(c,compress=T,margin=0.3)
+text(c,cex=1.5)
+```
+위에서부터 차례대로 1,2,3,6,7노드  
+```{r}
+library(rpart.plot)
+
+prp(c,type=4,extra=2)
+```
+마찬가지, 조금 더 보기 친절한 그래프
+<br><br>
+## Predict
+Classifier에서 predict는 Vote를 통하여 진행됨
+```{r}
+head(predict(c,newdata = iris, type = "class"))
+tail(predict(c,newdata = iris, type = "class"))
+```
+
+## Cptable
+cost-complexity parameter의 약자  
+Pruning과 트리의 최대 크기를 조절하는 옵션으로 사용됨  
+```{r}
+c$cptable
+
+opt=which.min(c$cptable[,"xerror"])
+opt
+cp = c$cptable[opt,"CP"]
+cp
+prune.c = prune(c,cp=cp)#pruning with opt
+plot(prune.c)
+text(prune.c,use.n=T)
+
+plotcp(c)
+```
+y축 = X에 대한 error(Xerror)  
+X축(아래) = cp
+X축(위) = depth of the tree
+
+# ctree를 활용
+카이제곱을 이용한 split을 진행함
+```{r}
+library(party)
+library(rpart)
+
+data(stagec)
+str(stagec)
+
+#remove na
+stagec1 = subset(stagec,!is.na(g2))
+stagec2 = subset(stagec1,!is.na(gleason))
+stagec3 = subset(stagec2,!is.na(eet))
+str(stagec3)
+
+#train_test split
+set.seed(1234)
+ind = sample(2,nrow(stagec3),replace=T,prob=c(0.7,0.3))#sample(number of group,total number...)
+
+trainData = stagec3[ind==1,]
+testData = stagec3[ind==2,]
+
+tree = ctree(ploidy~.,data=trainData)
+tree
+plot(tree)
+```
+트리에 대한 해석은 같음
+Weight = 노드 안의 표본 수
+<br><br>
+## Predict
+```{r}
+testPred = predict(tree,newdata = testData)
+table(testPred,testData$ploidy)#Confusion Matrix
+```
+대각선이 정확하게 분류한 것들이며 y축이 예측, x축이 실제값  
+=> 실제론 aneuploid이지만 모델은 diploid로 예측한 것이 한 개  
+    실제론 aneuploid이지만 모델은 testraploid로 예측한 것이 한 개  
+즉 두 개밖에 틀리지 않음, 그렇다고 좋은 모델인가?
+=> aneuploid는 총 표본 중 2개 밖에 차지하지 않기에 이 범주에 대한 분류는 다 틀렸음
+=> 단순히 정확도가 높다고 좋은 모델이 아님, 데이터의 상태에 따라 그 기준은 달라짐
+
+# 연속형의 Tree
+```{r}
+airq = subset(airquality,!is.na(Ozone))
+head(airq)
+
+airct = ctree(Ozone~.,data=airq)
+airct
+
+plot(airct)
+```
+<br><br>
+## predict
+예측의 평균값이 반영  
+=> 같은 노드로 예측된 데이터는 같은 예측값을 가짐
+```{r}
+head(predict(airct,data=airq))
+
+#We can show each data is in which node
+predict(airct,data=airq,type="node")
+
+#mean Square Error
+mean((airq$Ozone - predict(airct,data=airq))^2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
