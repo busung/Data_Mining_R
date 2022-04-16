@@ -1,0 +1,176 @@
+---
+title: "2. logistic"
+author: "Park Ju ho"
+date: '2022 4 13 '
+mainfont: UnDotum
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# 설명변수가 1개인 로지스틱
+```{r}
+library(tidyverse)
+data(iris)
+
+#setosa와 versicolor만 추출
+a = subset(iris, Species == "setosa"|Species == "versicolor")
+#Species의 범주화
+a= a %>% 
+  mutate(Species = as.factor(Species))
+
+str(a)
+
+#일반화 선형모델 중 이중 분류 모델 = logistic 
+b = glm(Species~Sepal.Length, data = a, family=binomial)
+summary(b)
+```
+## Coefficients
+여기선 exp값이 아닌 단순 베타값이다(exp(5.140)=170정도 이므로 VersiCOlor일 오즈가 170배 증가함)  
+=> 이 때 이진 분류 일경우 factor의 마지막 값이 성공 즉 파이(x)값이 됨  
+이 둘의 유의확률이 0.05밑이므로 모두 유의하다고 할 수 있다
+
+## Deviance
+유의미한 회귀인지 판단해 주는 척도  
+Null Deviance = 절편만을 모수로 가지는 모형  
+=>p값(자유도 99의 카이제곱 > 138.629의 확률이 0.005)이 0.005정도로 귀무가설을 기각, 적합 결여를 나타냄  
+Residual Deviance = 현재 모형(Sepal.Length와 절편을 모수로 가지는 모형)  
+=>p값(자유도 98의 카이제곱 > 64.211의 확률이 0.997)이 0.997정도로 귀무가설을 채택, 적합이 잘 되었다고 할 수 있음  
+## AIC
+정보량에 대한 모델 평가 통계량(값이 작을 수록 좋음)  
+=> 모형끼리 비교할 때 더 나은 모델을 찾기 위하여 사용  
+## 회귀 계수와 오즈의 증가량에 대한 신뢰구간
+```{r}
+coef(b)
+exp(coef(b)["Sepal.Length"])
+
+confint(b, parm = "Sepal.Length")
+exp(confint(b,parm = "Sepal.Length"))
+```
+## 적합 결과
+0.5보다크면 versicolor  
+```{r}
+fitted(b)[c(1:5,96:100)]
+```
+## 예측
+이진분류 이기에 type="response"
+```{r}
+predict(b,newdata=a[c(1,50,51,100),],type="response")
+```
+## cdplot
+연속형 변수 X에 대하여 범주형 변수 Y의 조건부 분포 변화를 보여줌  
+(Error 발생...)
+```{r}
+#cdplot(Species~Sepal.Length, data=a)
+```
+## 로지스틱 회귀모형 그래프
+```{r}
+plot(a$Sepal.Length, a$Species, xlab="Sepal.Length")
+x=seq(min(a$Sepal.Length), max(a$Sepal.Length), 0.1)
+lines(x, 1+(1/(1+(1/exp(-27.831+5.140*x)))), type="l", col="red")
+```
+# 다항 로지스틱
+예측 변수가 여러개
+```{r}
+#no need $ when use attach
+attach(mtcars)
+str(mtcars)
+
+glm.vs = glm(vs~mpg+am, data = mtcars, family = binomial)
+summary(glm.vs)
+```
+## coefficients
+해석은 위와 같음  
+이 때 am의 유의 확률이 0.06으로 유의 수준 0.05보다 크다 => 귀무가설을 기각 할 수 없음...
+```{r}
+coef(glm.vs)
+exp(coef(b)[c("Sepal.Length","am")])
+
+```
+
+## Deviance
+해석 위와 같음  
+
+# 변수 선택
+StepWise,Backward,Forward 방식이 있음  
+Backward = 모든 변수가 추가되어 있는 모델에서 하나씩 제거하면서 유의성 검증  
+Forward = 변수를 하나씩 추가해 가며 유의성 검증  
+SteopWise = 둘의 방식을 섞은거  
+## backward 방식
+```{r}
+step.vs = step(glm.vs,direction="backward")
+```
+각각 mpg와 am 모두를 사용했을 때,am을 제외하였을 때, mpg를 제외하였을 때의 결과를 보여준다  
+이 중 아무것도 제거하지 않은 모델의 AIC가 가장 낮기에 AIC를 채택한다  
+## forward 방식
+```{r}
+step.vs = step(glm.vs,direction="forward")
+```
+AIC가 가장 낮은 모델인 mpg+am 모델을 추천해 주는 것을 확인 할 수 있다  
+## stepwise 방식
+```{r}
+step.vs = step(glm.vs,direction="both")
+```
+각각 mpg와 am 모두를 사용했을 때,am을 제외하였을 때, mpg를 제외하였을 때의 결과를 보여준다  
+이 중 아무것도 제거하지 않은 모델의 AIC가 가장 낮기에 AIC를 채택한다  
+## anova를 활용한 변수 선택  
+변수를 입력 순서대로 하나씩 입력해 가며 데비언스의 유의성을 판단하는 모델  
+```{r}
+anova(glm.vs,test="Chisq")
+```
+mpg를 추가하였을 때 Null Deviance와의 차이가 굉장히 유의하게 나옴  
+am을 추가하였을 때 유의확률 0.05에선 유의하였으나 mpg보단 덜 한 것을 확인 할 수 있음
+
+```{r}
+glm.vs2 = glm(vs~am+mpg, data = mtcars, family = binomial)
+
+anova(glm.vs2,test="Chisq")
+```
+입력순서인 am을 먼저 검정하는 것을 확인 할 수 있음  
+am을 먼저 입력 시 Deviance의 차이가 유의미하지 않을 것을 확인 할 수 있음
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
