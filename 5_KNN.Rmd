@@ -1,0 +1,245 @@
+---
+title: "KNN"
+author: "Park Ju ho"
+date: '2022 4 17 '
+mainfont: UnDotum
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# class의 knn함수를 이용한 knn
+모형식 기반이 아니기에 그냥 test,train을 넣음
+```{r}
+library(class)
+
+data(iris3)#data shape = 50*4*3 = number of data,feature,label
+
+head(iris3)
+
+train = rbind(iris3[1:25,,1],iris3[1:25,,2],iris3[1:25,,3])
+test = rbind(iris3[26:50,,1],iris3[26:50,,2],iris3[26:50,,3])
+
+cl = factor(c(rep("s",25),rep("c",25),rep("v",25)))#setosa,versicolor,virginica
+
+knn(train,test,cl,k=3,prob=T)
+```
+k=3일 때 test data를 분류한 결과  
+prob는 각 label이 분류된 그 확률을 의미  
+=> 3개 중 가장 많은 label의 비율  
+ex)K개 안에 setosa 2개 virgicolor 1개 => 0.6667의 확률로 setosa  
+
+# DMwR의 knn함수
+모형식 기반으로 수행, 정규화 옵션을 제공해 줌
+```{r}
+library(DMwR)
+
+data(iris)
+idxs = sample(1:nrow(iris),as.integer(0.7*nrow(iris)))#Train = 150 * 0.7, test = 150*0.3
+trainIris = iris[idxs,]
+testIris = iris[-idxs,]
+
+nn3 = kNN(Species~., trainIris,testIris,norm = F,k=3)
+
+table(testIris$Species,nn3)
+
+nn3_n = kNN(Species~., trainIris,testIris,norm = T,k=3)
+
+table(testIris$Species,nn3_n)
+
+nn5 = kNN(Species~., trainIris,testIris,norm = F,k=5)
+
+table(testIris$Species,nn5)
+```
+k=3이고 정규화는 하지 않은 것, k=3이고 정규화를 진행한 것, k=5인 것 3가지를 비교
+
+# kknn을 활용한 knn
+kernel을 활용 할 수 있는 함수
+```{r}
+library(kknn)
+
+data(iris)
+
+m = dim(iris)[1]
+m
+
+val = sample(1:m, size = round(m/3), replace = F, prob = rep(1/m,m))
+iris.learn = iris[-val,]
+iris.valid = iris[val,]
+
+iris.kknn = kknn(Species~.,iris.learn,iris.valid,distance=1,kernel="triangular")
+summary(iris.kknn)
+
+fit = fitted(iris.kknn)
+table(iris.valid$Species,fit)
+```
+triangular 커널을 적용하고 유클리드가 아닌 m=1거리를 적용시킨 knn
+
+```{r}
+pcol = as.character(as.numeric(iris.valid$Species))
+pairs(iris.valid[1:4],pch=pcol,col=c("green3","red")[(iris.valid$Species!=fit)+1])
+```
+틀린 데이터만 빨간색으로 하여 그래프를 그림  
+Sepal.Length와 Petal.Length를 보면 2,3이 구분되는 경계에 오분류가 많이 발생함  
+=> 분류에 사용시 조금 조심할 필요가 있음
+
+# k-NN회귀
+```{r}
+full <- data.frame(name=c("McGwire,Mark", "Bonds,Barry",
+					"Helton,Todd", "Walker,Larry",
+					"Pujols,Albert", "Pedroia,Dustin"),
+			lag1=c(100,90,75,89,95,70),
+			lag2=c(120,80,95,79,92,90),
+			Runs=c(65,120,105,99,65,100))
+full
+
+train = full[full$name!="Bonds,Barry",]
+test = full[full$name=="Bonds,Barry",]
+
+k = kknn(Runs~lag1+lag2,trai = train,test = test, k=2, distance=1)
+fit = fitted(k)
+fit
+```
+Bonds,Barry의 예측값으로 90.5를 예측
+
+```{r}
+names(k)
+
+k$fitted.values
+
+k$CL
+k$W
+```
+Bonds의 인접값으론 99와 65가 나왔으며 이 둘의 가중치는 각각 0.75,0.25이다  
+Predcit = (99 * 0.75+65 * 0.25)/2 = 90.5
+
+```{r}
+k$C
+
+train[c(k$C),]
+```
+인접한 두 선수론 3번과 4번 인덱스인 선수이다  
+이 둘은 Larry와 Alber이다
+
+# FNN을 활용한 KNN
+Query를 활용하여 Knn이 가능함
+```{r}
+library(FNN)
+
+get.knnx(data = train[,c("lag1","lag2")], query = test[,c("lag1","lag2")],k=2)
+```
+train data의 lag1과 lag2를 이용하여 test data의 예측값을 구하는 것  
+위의 결과와 같이 인접한 이웃은 같으며 그 거리는 1.41,13을 거리를 가진다
+
+# caret data를 활용한 k-NN 분석
+```{r}
+library(ISLR)
+library(caret)
+
+set.seed(100)
+indxTrain = createDataPartition(y = Smarket$Direction, p = 0.75, list = F)#train_test_split
+training = Smarket[indxTrain,]
+testing = Smarket[-indxTrain,]
+
+prop.table(table(training$Direction))*100
+prop.table(table(testing$Direction))*100
+prop.table(table(Smarket$Direction))*100
+
+#normalization
+trainX = training[,names(training)!="Direction"]
+preProcValues = preProcess(x = trainX,method = c("center","scale"))
+preProcValues
+
+set.seed(200)
+ctrl = trainControl(method = "repeatedcv",repeats = 3)#cross Validate
+knnFit = train(Direction ~ ., data = training, method = "knn", trControl=ctrl, preProcess = c("center","scale"),tuneLength = 20)
+
+knnFit
+```
+10 fold validate를 3번 반복하여 각 K별 정확도를 측정한 결과 K가 43일 때 정확도가 가장 높다
+```{r}
+plot(knnFit)
+```
+<br><br>
+K의 수가 증가할수록 정확도가 증가하고 있고 그 값이 43일 때 가장 높은 것을 그래프로 확인 할 수 있다
+
+```{r}
+knnPredict = predict(knnFit, newdata = testing)
+confusionMatrix(knnPredict,testing$Direction)
+```
+검증용 자료에 대한 정확도가 95%  
+=> 상당히 잘 예측하는 것을 확인 할 수 있음
+=> 과적합 역시 발생하지 않음
+
+Accuracy = 정분류율
+95% CI= 정분류율에 대한 신뢰구간
+No Information Rate = 최빈값의 비율
+
+Kappa와 Mcnemar's = 일치도를 나타내는 계수
+Mcnemar는 0.2단위로 구간을 나누며 값이 클 수록 일치한다는 의미임
+
+![pic1](pic1.jpg){width=100%}
+Confusion Matrix와 관련하여 분류의 성능 척도에 쓰이는 지표들
+
+<br><br>
+## AUC,민감도,특이도 정보
+summaryFunction = twoClassSummary 이것을 추가함으로써 위의 정보를 제공
+```{r}
+set.seed(200)
+ctrl = trainControl(method = "repeatedcv",repeats = 3,classProbs = T,summaryFunction = twoClassSummary)#cross Validate
+knnFit = train(Direction ~ ., data = training, method = "knn", trControl=ctrl, preProcess = c("center","scale"),tuneLength = 20)
+knnFit
+```
+Accuracy 대신 ROC로 모델을 평가하는 것을 확인 할 수 있다
+
+```{r}
+plot(knnFit,print.thres=0.5,type="S")
+```
+<br><br>
+ROC그래프를 확인 할 수 있다
+
+```{r}
+knnPredict = predict(knnFit, newdata = testing)
+confusionMatrix(knnPredict,testing$Direction)
+```
+```{r}
+mean(knnPredict == testing$Direction)
+```
+정확도를 구하는 방법 중 하나
+
+## ROC Curve 그리기
+```{r}
+library(pROC)
+
+knnPredict = predict(knnFit, newdata = testing, type = "prob")
+head(knnPredict)
+
+knnROC = roc(testing$Direction, knnPredict[,"Down"],levels = levels(testing$Direction))
+knnROC
+
+plot(knnROC,type="S",print.thres=0.5)
+```
+거의 활처럼 휘어있는 모습을 볼 수 있다  
+=> 매우 좋은 모델이라는 것을 확인 할 수 있음
+
+
+
+
+
+
+
+
+
+
+
+
+
+
