@@ -1,0 +1,118 @@
+---
+title: "Naive_bayes"
+author: "Park Ju ho"
+date: '2022 4 17 '
+mainfont: UnDotum
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# e1071를 이용한 Naive Bayes
+```{r}
+library(e1071)
+
+data(iris)
+m = naiveBayes(Species~.,data=iris)
+
+m
+```
+iris data의 정보를 제공해 줌  
+1. label의 비율은 어떠한지  
+2. 각 feature별|범주별 mean과std를 보여줌  
+
+```{r}
+table(predict(m,iris),iris[,5])
+```
+Naive Bayes 분류기를 활용한 분류  
+총 6개를 잘 못 분류한 것을 확인 할 수 있다
+
+# klaR을 이용한 Naive Bayes
+```{r}
+library(klaR)
+library(kernlab)
+data(spam)
+colnames(spam)
+
+train.ind = sample(1:nrow(spam), ceiling(nrow(spam)*2/3), replace=FALSE)
+nb.res = NaiveBayes(type ~ ., data=spam[train.ind,])
+
+par(mfrow=c(2,3))
+plot(nb.res)
+```
+<br><br>
+변수의 영향력을 알아보는 그래프  
+선이 겹치지 않을 수록 잘 분류하는 변수로써 중요도가 높다고 할 수 있다  
+
+## pred
+```{r}
+nb.pred = predict(nb.res,spam[-train.ind,])
+c_mat=table(nb.pred$class,spam[-train.ind,"type"])
+c_mat
+
+sum(diag(c_mat))/sum(c_mat)
+```
+0.7038의 정확도를 보여준다
+<br><br>
+
+# Na를 포함하고 있는 자료 Naive Bayes
+훈련 시: 결측값 포함 시 케이스에서 제외  
+예측 시: 결측인 속성을 계산 과정에서 생략
+```{r}
+library(e1071)
+library(mlbench)
+
+data("HouseVotes84")
+head(HouseVotes84)
+summary(HouseVotes84)
+
+model = naiveBayes(Class~.,data = HouseVotes84)
+pred = predict(model,HouseVotes84[,-1])
+tab = table(pred,HouseVotes84$Class)
+
+tab
+sum(diag(tab))/sum(tab)
+```
+결측치를 제거하지 않아도 잘 예측하는 것을 확인 할 수 있다
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
