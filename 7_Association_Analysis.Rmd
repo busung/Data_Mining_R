@@ -1,0 +1,163 @@
+---
+title: "7_Association_Analysis"
+author: "Park Ju ho"
+date: '2022 6 9 '
+output:
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+mainfont: UnDotum
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+# Titanic 데이터를 이용한 연관 분석
+Freq 값은 해당 행과 일치하는 데이터의 빈도수
+이를 loop를 활용하여 데이터를 해제시켜주고 모두 문자열로 변경시켜 줌
+```{r}
+titanic.df = as.data.frame(Titanic)
+head(titanic.df)
+summary(titanic.df)
+
+titanic <- NULL
+for(i in 1:4) { titanic <- cbind(titanic,
+                                 rep(as.character(titanic.df[,i]), titanic.df$Freq)) }
+titanic <- as.data.frame(titanic)
+names(titanic) <- names(titanic.df)[1:4]
+head(titanic)
+```
+
+```{r}
+library(arules)
+
+rules.all = apriori(titanic)
+options(digits=3)
+inspect(rules.all)
+```
+<br><br>
+support = 지지도, confidence = 신뢰도, lift = 향상도
+lhs = X, rhs = Y라고 생각하면 됨
+[1]을 해석해보면 X가 공집합이기에 지지도,신뢰도 = 전체에서 어른의 비율, 그렇기에 향상도도 1이 나올 수 밖에 없음
+이 떄 지지도,신뢰도,향상도 중 어떤 것을 기준으로 삼을지는 분석가의 판단에 맡김
+
+## 위의 데이터에서 우리는 결국 Y가 생존 여부가 되는 것에만 관심이 있기에 이를 추출해서 분석
+minlen = 최소 부분 집합의 크기
+supp = 최소지지도 설정
+conf = 최소 신뢰도 설정
+```{r}
+rules <- apriori(titanic, control = list(verbose=F),
+                 parameter = list(minlen=2, supp=0.005, conf=0.8),#minlen = lhs의 품목의 수
+                 appearance = list(rhs=c("Survived=No", "Survived=Yes"),#관심이 있는 Y를 지정
+                                   default="lhs"))
+
+# 향상도(lift) 기준으로 정렬
+rules.sorted <- sort(rules, by="lift")
+# 규칙 확인
+inspect(rules.sorted)
+```
+<br><br>
+생존자 중에서 3등급 객실이 없는 것을 보니 3등급 객실 사람들은 대부분 사망했다는 것을 확인 할 수 있다
+
+## 중복제거
+is.subset을 통하여 부분 함수인지 테스트
+이 때 정렬이 되어 있어야 더 큰 측도의 조건이 살아남음
+=> 조건이 다른 조건의 부분 집합인데 측도가 더 작다면 그것을 없애는 방식
+```{r}
+subset.matrix <- is.subset(rules.sorted, rules.sorted)#정렬 되어 있어야함
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- F#하 삼각행렬과 대각행렬을 모두 F로 변경
+redundant <- colSums(subset.matrix, na.rm = T) >= 1#
+which(redundant)#위치를 반환
+
+rules.pruned <- rules.sorted[!redundant]
+inspect(rules.pruned)
+```
+<br><br>
+
+## 연관 규칙의 시각화
+### 1
+3가지 측도를 모두 표현하기는 힘들기에 디폴트인 지지도와 신뢰도만 표현
+```{r}
+library(arulesViz)
+plot(rules.all) # 디폴트 옵션: measure=c("support", "confidence"), shading="lift"
+plot(rules.all, shading="order") #규칙 번호에 따라 음영을 부여
+```
+<br><br>
+
+### 2
+```{r}
+plot(rules.sorted) # 12개 규칙
+plot(rules.sorted, method="grouped")
+```
+<br><br>
+의미 파악 자체는 이 그래프가 조금 더 쉬움
+
+### 3
+```{r}
+plot(rules.sorted, method="graph")
+```
+<br><br>
+상당히 해석이 난해한 것을 확인 할 수 있음
+
+### 4
+평행좌표그림으로 x축은 조건을 거쳐오는 횟수임
+```{r}
+plot(rules.sorted, method="paracoord", control=list(reorder=TRUE))
+```
+<br><br>
+
+### 5
+대화식 그림, 선택된 규칙을 조사하거나, 줌인, 필터링 등을 할 수 있음(코드 에러 뜸....)
+```{r}
+#plot(rules.sorted, measure=c("support", "lift"), shading="confidence", interactive=TRUE) 
+```
+<br><br>
+
+### 6
+행렬-기반 시각화
+```{r}
+plot(rules.sorted, method="matrix", measure="lift")
+```
+<br><br>
+
+### 7
+3D
+```{r}
+plot(rules.sorted, method="matrix3D", measure="lift")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
