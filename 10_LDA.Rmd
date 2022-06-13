@@ -1,0 +1,246 @@
+---
+title: "10_LDA"
+author: "Park Ju ho"
+date: '2022 6 12 '
+output:
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+mainfont: UnDotum
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+
+```{r}
+lpga<-read.table('D:/학교/4-1학기/데마입/R/lpga2008.txt', fileEncoding = 'utf-8',sep=",",header=T)
+head(lpga)
+lpga$상금그룹[rank(-lpga$상금)<=40]<-'상'
+lpga$상금그룹[rank(-lpga$상금)>40]<-'하'
+```
+# 산점도를 통한 상관관계 분석
+```{r}
+library(car)
+scatterplotMatrix(~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브|상금그룹,data=lpga,col=c(3,4))
+
+```
+<br><br>
+
+# 공분산 검정
+귀무가설은 대부분 같은 걸로 잡음
+귀무 가설 = 분산이 같다, 대립 가설 = 분산이 다르다
+```{r}
+library(heplots)
+boxM(lpga[,2:7],lpga$상금그룹)
+```
+p_value가 상당히 작은 것으로 보아 귀무 가설을 기각 할 수 있기에 분산이 다르다고 할 수 있다
+
+# MASS를 이용한 LDA
+lda에서 Prior를 따로 입력하지 않으면 전체 데이터에서의 비율을 사용
+```{r}
+library(MASS)
+#판별규칙
+lpga.lda<-lda(상금그룹~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브,data=lpga) 
+
+
+#판별규칙 결과 출력
+lpga.lda
+lpga.lda.p<-predict(lpga.lda) 
+```
+Coefficients => 판별 분석의 판별식의 계수 (회귀분석 식과 똑같음 오차항이 없을 뿐)
+결과값이 판별값이 아닌 사후 확률을 반환
+
+## 예측값의 각 범주별 사후 확률
+```{r}
+head(lpga.lda.p$posterior)
+```
+
+## Confusion Matrix
+```{r}
+lpga.lda.ct<-table(lpga$상금그룹,lpga.lda.p$class)
+prop.table(lpga.lda.ct,1) #행 퍼센트,분류표
+sum(diag(prop.table(lpga.lda.ct))) #정분류
+```
+0.91정도의 분류율을 보여주고 있음
+
+
+## 사전확률을 부여한 LDA
+```{r}
+lpga.lda<-lda(상금그룹~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브,data=lpga, prior=c(0.2,0.8))
+lpga.lda
+
+lpga.lda.p<-predict(lpga.lda) 
+head(lpga.lda.p$posterior)
+```
+사전 확률을 부여하면 판별 규칙은 같으나 사후 확률이 달라짐
+
+# klaR을 이용한 LDA
+```{r}
+library(klaR)
+#그래프로 결과가 출력
+partimat(as.factor(상금그룹)~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수
+         +샌드_회수+샌드_세이브,data=lpga,method='lda')
+
+# 분류 결과를 기호로 변환
+# 상인데 맞췄으면 OO, 하인데 맞췄으면 XX, 하인데 상으로 분류했으면 OX, 상인데 하로 분류했으면 XO
+lpga.lda.result<-cbind(lpga,lpga.lda.p$class)
+lpga.lda.result$분류결과[lpga.lda.result[,10]==lpga.lda.result[,11] &
+                       lpga.lda.result[,10]=='상']<-'OO'
+lpga.lda.result$분류결과[lpga.lda.result[,10]==lpga.lda.result[,11] &
+                       lpga.lda.result[,10]=='하']<-'XX'
+lpga.lda.result$분류결과[lpga.lda.result[,10]!=lpga.lda.result[,11] &
+                       lpga.lda.result[,10]=='상']<-'OX'
+lpga.lda.result$분류결과[lpga.lda.result[,10]!=lpga.lda.result[,11] &
+                       lpga.lda.result[,10]=='하']<-'XO'
+head(lpga.lda.result)
+
+scatterplotMatrix(~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브|분류결과,data=lpga.lda.result,col=c(1:4))
+
+```
+<br><br>
+
+## 산점도로 표현
+```{r}
+library(GGally)
+#theme_update(text=element_text(family="AppleGothic"))#그래프의 테마 업데이트
+ggpairs(lpga.lda.result[,2:7],aes(color=lpga.lda.result$분류결과,alpha=0.4),upper=list(continuous='smooth'))
+```
+<br><br>
+
+실선은 그 경향을 나타내고 분류결과가 총 4가지이기에 4가지 색을 보여줌
+
+## 클래스를 기준으로 summary를 구해보기
+```{r}
+library(doBy)
+summaryBy(평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브~분류결과, data=lpga.lda.result,FUN=c(mean,sd),na.rm=TRUE)
+
+boxplot(평균_비거리~분류결과,data=lpga.lda.result,notch=TRUE,col='blue',main="비거리 상자그림", xlab="판별그룹")
+
+predict(lpga.lda,newdata=data.frame(평균_비거리=260,페어웨이_안착율=70,그린_적중률=65,평균_퍼팅수=28,샌드_회수=1.5,샌드_세이브=40))$posterior
+```
+<br><br>
+
+oo와 xx의 summary차이를 보면 이 변수가 과연 분류에 효과적인지 확인 할 수 있음
+=> 즉 이 둘의 차이가 큰 변수가 분류를 잘 해준다고 할 수 있음
+
+# 2차/비선형 판별 분석
+선형과 해석 방법은 똑같음
+```{r}
+lpga.qda<-qda(상금그룹~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수+샌드_회수+샌드_세이브,data=lpga)
+lpga.qda
+lpga.qda.p<-predict(lpga.qda) #사후확률(posterior), 판별값(x)
+
+lpga.qda.ct<-table(lpga$상금그룹,lpga.qda.p$class)
+lpga.qda.ct
+prop.table(lpga.qda.ct,1) #행 퍼센트,분류표
+sum(diag(prop.table(lpga.qda.ct))) #정분류
+```
+
+## 그래프 그리기
+```{r}
+library(klaR)
+partimat(as.factor(상금그룹)~평균_비거리+페어웨이_안착율+그린_적중률+평균_퍼팅수
+         +샌드_회수+샌드_세이브,data=lpga,method='qda')
+```
+<br><br>
+
+LDA와 달리 그 그래프 분류 경계가 곡선으로 나타나는 것을 확인 할 수 있음
+
+```{r}
+lpga.qda.result<-cbind(lpga,lpga.qda.p$class)
+lpga.qda.result$분류결과[lpga.qda.result[,10]==lpga.qda.result[,11] &
+                       lpga.qda.result[,10]=='상']<-'OO' #두 개가 동일하면 정분류!
+lpga.qda.result$분류결과[lpga.qda.result[,10]==lpga.qda.result[,11] &
+                       lpga.qda.result[,10]=='하']<-'XX'
+lpga.qda.result$분류결과[lpga.qda.result[,10]!=lpga.qda.result[,11] &
+                       lpga.qda.result[,10]=='상']<-'OX' #오분류
+lpga.qda.result$분류결과[lpga.qda.result[,10]!=lpga.qda.result[,11] &
+                       lpga.qda.result[,10]=='하']<-'XO'
+table(lpga.qda.result[,12])
+```
+11개의 분류만 틀리고 모두 맞춘 것을 확인 할 수 있음
+
+```{R}
+predict(lpga.qda,newdata=data.frame(평균_비거리=260,페어웨이_안착율=70,그린_적중률=65,평균_퍼팅수=28,샌드_회수=1.5,샌드_세이브=40))$posterior
+```
+사후확률
+
+# iris data를 이용한 LDA
+
+## 공분산 동질성 테스트
+```{r}
+boxM(iris[,1:4],iris$Species)
+```
+p-value가 작으므로 공분산은 다르다고 할 수 있음
+
+## LDA 실행
+```{r}
+library(MASS)
+iris.qda<-qda(iris$Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width, data=iris)
+iris.qda.p<-predict(iris.qda) #사후확률($posterior), 판별결과($class)
+iris.qda
+```
+해석은 똑같음
+
+```{r}
+iris.qda.ct<-table(iris$Species,iris.qda.p$class)
+iris.qda.ct
+prop.table(iris.qda.ct,1) #행 퍼센트,분류표
+sum(diag(prop.table(iris.qda.ct))) #정분류
+```
+3개만 틀리고 모두 맞춘 결과를 보여주고 있다
+정분류 0.98로 좋은 성적을 보여준다
+
+### 그래프 그리기
+```{r}
+partimat(iris$Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width,data=iris,method='lda')
+```
+<br><br>
+
+## 비선형 판별 분석
+```{r}
+partimat(iris$Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width,data=iris,method='qda')
+```
+
+```{r}
+iris.qda.result<-cbind(iris,iris.qda.p$class)
+#colnames을 저렇게 쓰니까 class별로 분류가 안되고 이상하게 나옴 그래서 이름 변경
+colnames(iris.qda.result) = c("Sepal.Length","Sepal.Width","Petal.Length","Petal.Width","Species","class")
+summaryBy(Sepal.Length+Sepal.Width+Petal.Length+Petal.Width~class,data=iris.qda.result,FUN=c(mean,sd),na.rm=TRUE)
+
+names(iris.qda.result)
+boxplot(Sepal.Length~iris.qda.p$class,data=iris.qda.result,notch=TRUE,col='blue',main="Sepal Length by Classification", xlab="Class Result")
+```
+
+### qda를 이용한 예측
+```{r}
+predict(iris.qda,newdata=data.frame(Sepal.Length=45,Sepal.Width=30,Petal.Length=30,Petal.Width=15))$posterior
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
